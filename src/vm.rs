@@ -116,8 +116,6 @@ impl<'a> VM<'a> {
 
     fn advance(&mut self) -> Result<(), InterpretError> {
         println!("{:?}", self.chunk.code);
-        let mut fugg = Stream::new("fjkldsk");
-        fugg.input = "fdjskl";
         match self.tokenizer.parse() {
             Ok(tok) => {
                 if let Some(t) = self.parser.cur {

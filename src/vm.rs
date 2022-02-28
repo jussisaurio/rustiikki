@@ -104,7 +104,8 @@ impl MyParser {
 
 impl<'a> VM<'a> {
     pub fn new(tokenizer: Tokenizer<'a>) -> VM<'a> {
-        // TODO line information is completely bonkers, fix stupid tokenizing logic
+        // TODO fix emitted compiler error messages to be less ugly
+        // TODO fix emitted runtime error messages to have line information
         VM { instruction_pointer: 0, chunk: Chunk::new(), stack: Vec::new(), parser: MyParser::new(), tokenizer, debug: false }
     }
 

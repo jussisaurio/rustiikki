@@ -85,7 +85,7 @@ where
             '(' => Token::ParenL,
             ')' => Token::ParenR,
             '!' => Token::Bang,
-            _ => panic!("unexpected")
+            _ => panic!("unexpected") // TODO remove panic with "always fail parser"
         }
     };
 
@@ -95,7 +95,7 @@ where
             ">=" => Token::GEqual,
             "<=" => Token::LEqual,
             "!=" => Token::BangEqual,
-            _ => panic!("unexpected")
+            _ => panic!("unexpected") // TODO remove panic with "always fail parser"
         }
     };
 

@@ -23,27 +23,15 @@ pub enum Value {
 #[derive(Debug, Clone)]
 pub struct Chunk {
     pub code: Vec<Opcode>,
-    pub line_information: Vec<(usize, usize)>, // line number, count of instructions on same line
+    pub line_information: Vec<(usize, usize)>, // (line number, column number)
     pub constants: Vec<Value>
 }
 
 impl Chunk {
-    pub fn write(&mut self, op: Opcode, line_number: usize) -> &mut Chunk {
+    pub fn write(&mut self, op: Opcode, (line, column): (usize, usize)) -> &mut Chunk {
         self.code.push(op);
 
-        if self.line_information.len() == 0 {
-            self.line_information.push((line_number, 1));
-            return self
-        }
-
-        let cur_line_idx = self.line_information.len() - 1;
-        let (cur_line_number, cur_line_count) = self.line_information[cur_line_idx];
-        
-        if cur_line_number == line_number {
-            self.line_information[cur_line_idx] = (cur_line_number, cur_line_count + 1);
-        } else {
-            self.line_information.push((line_number, 1));
-        }
+        self.line_information.push((line, column));
 
         self
     }
@@ -52,33 +40,24 @@ impl Chunk {
     }
     pub fn disassembleInstruction(&self, inst_number: usize) {
         let opcode = &self.code[inst_number as usize];
-        let line_number = self.get_line(inst_number);
+        let (line, column) = self.get_line_and_column(inst_number);
         match opcode {
-            Opcode::Constant(idx) => println!("instruction {:?} line {:?} Constant {:?}, {:?}", inst_number, line_number, idx, self.constants[*idx as usize]),
-            otherwise => println!("instruction {:?} line {:?} {:?}", inst_number, line_number, otherwise),
+            Opcode::Constant(idx) => println!("instruction {:?} line {:?} column {:?} Constant {:?} -- {:?}", inst_number, line, column, idx, self.constants[*idx as usize]),
+            otherwise => println!("instruction {:?} line {:?} column {:?} -- {:?}", inst_number, line, column, otherwise),
         }
     }
-    fn get_line(&self, inst_number: usize) -> usize {
-        let mut i = 0;
-        for (line_number, count) in &self.line_information {
-            for _ in 1..=*count {
-                if i == inst_number {
-                    return *line_number;
-                }
-                i += 1;
-            }
-        }
-
-        return 0;
+    pub fn get_line_and_column(&self, inst_number: usize) -> (usize, usize) {
+        let val = self.line_information.get(inst_number).unwrap_or(&(0,0));
+        *val
     }
     pub fn add_constant(&mut self, c: Value) -> &mut Chunk {
         self.constants.push(c);
         self
     }
 
-    pub fn emit_constant(&mut self, c: Value, line: usize) {
+    pub fn emit_constant(&mut self, c: Value, line_and_column: (usize, usize)) {
         self.add_constant(c);
         let ind = self.constants.len() - 1;
-        self.write(Opcode::Constant(ind), line);
+        self.write(Opcode::Constant(ind), line_and_column);
     }
 }

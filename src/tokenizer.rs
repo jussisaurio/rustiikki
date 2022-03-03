@@ -31,10 +31,10 @@ pub struct TokenWithLine {
     pub line_information: (usize, usize)
 }
 
-#[derive(Debug, PartialEq)]
-pub struct ErrorToken<'a> {
-    errors: Vec<easy::Error<char, &'a str>>,
-    line_information: (usize, usize)
+#[derive(Debug, PartialEq, Clone)]
+pub struct ErrorToken {
+    pub errors: Vec<String>,
+    pub line_information: (usize, usize)
 }
 
 trait Bifunctor<A, B, C, D> {
@@ -157,10 +157,11 @@ impl<'a> Tokenizer<'a> {
     
     let strm = self.stream.clone();
     let token = combined_parser.easy_parse(strm).bimap(
-        |err| {
+        |mut err| {
             let position = err.position();
+            err.clear_expected();
             ErrorToken {
-                errors: err.errors,
+                errors: err.errors.into_iter().map(|x| x.to_string()).collect(),
                 line_information: (position.line as usize, position.column as usize)
             }
         },

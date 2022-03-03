@@ -147,7 +147,7 @@ impl<'a> VM<'a> {
         let t = self.parser.prev.ok_or(self.create_internal_error("Expected to find a token in parser.prev"))?;
         let pre = t.get_prefix_parse_rule();
         if pre == ExprParserType::None {
-            return Err(self.create_compile_error(ErrorSource::T(("Expected prefix parsing rule", t))));
+            return Err(self.create_compile_error(ErrorSource::T(("Unexpected token", t))));
         }
         println!("Executing prefix rule {:?} for {:?}", pre, t);
         self.execute_rule(pre)?;

@@ -38,7 +38,7 @@ impl Chunk {
     pub fn new() -> Chunk {
         Chunk { code: Vec::new(), line_information: Vec::new(), constants: Vec::new() }
     }
-    pub fn disassembleInstruction(&self, inst_number: usize) {
+    pub fn disassemble_instruction(&self, inst_number: usize) {
         let opcode = &self.code[inst_number as usize];
         let (line, column) = self.get_line_and_column(inst_number);
         match opcode {

@@ -1,7 +1,6 @@
 use crate::chunk::*;
 extern crate combine;
 extern crate num;
-use combine::stream::position::*;
 use crate::tokenizer::*;
 
 
@@ -120,25 +119,21 @@ impl<'a> VM<'a> {
 
     fn advance(&mut self) -> Result<(), InterpretError> {
         println!("{:?}", self.chunk.code);
-        match self.tokenizer.parse() {
-            Ok(tok) => {
-                if let Some(t) = self.parser.cur {
-                    self.parser.prev = Some(t);
-                    self.parser.cur = Some(tok);
-                } else {
-                    self.parser.cur = Some(tok);
-                }
-                println!("Advance finished, prev: {:?} - curr: {:?}", self.parser.prev, self.parser.cur);
-                return Ok(())
-            }
-            Err(e) => return Err(self.create_compile_error(ErrorSource::E(e)))
-        }                
+        let tok = self.tokenizer.parse().or_else(|e| Err(self.create_compile_error(ErrorSource::E(e))))?;
+        if let Some(t) = self.parser.cur {
+            self.parser.prev = Some(t);
+            self.parser.cur = Some(tok);
+        } else {
+            self.parser.cur = Some(tok);
+        }
+        println!("Advance finished, prev: {:?} - curr: {:?}", self.parser.prev, self.parser.cur);
+        Ok(())
     }
 
     fn execute_rule(&mut self, rule: ExprParserType)-> Result<(), InterpretError> {
-        let token = self.parser.prev.unwrap();
+        let t = self.parser.prev.ok_or(self.create_internal_error("Expected to find a token in parser.prev"))?;
         match rule {
-            ExprParserType::None => Err(self.create_compile_error(ErrorSource::T(("Expected valid parsing rule", token)))),
+            ExprParserType::None => Err(self.create_compile_error(ErrorSource::T(("Expected valid parsing rule", t)))),
             ExprParserType::Binary => self.binary(),
             ExprParserType::Unary => self.unary(),
             ExprParserType::Literal => self.literal(),
@@ -149,30 +144,27 @@ impl<'a> VM<'a> {
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<(), InterpretError> {
         println!("Prec is {:?}", precedence);
         self.advance()?;
-        if let Some(t) = self.parser.prev {
-            let pre = t.get_prefix_parse_rule();
-            if pre == ExprParserType::None {
-                return Err(self.create_compile_error(ErrorSource::T(("Expected prefix parsing rule", t))));
-            }
-            println!("Executing prefix rule {:?} for {:?}", pre, t);
-            self.execute_rule(pre)?;
-            loop {
-                if let (Some(c), Some(p)) = (self.parser.cur, self.parser.prev) {
-                    if precedence > c.get_precedence() {
-                        break;
-                    }
-                    self.advance()?;
-                    let inf = c.get_infix_parse_rule();
-                    println!("Executing infix rule {:?} for {:?}", inf, p);
-                    self.execute_rule(inf)?;
-                } else {
+        let t = self.parser.prev.ok_or(self.create_internal_error("Expected to find a token in parser.prev"))?;
+        let pre = t.get_prefix_parse_rule();
+        if pre == ExprParserType::None {
+            return Err(self.create_compile_error(ErrorSource::T(("Expected prefix parsing rule", t))));
+        }
+        println!("Executing prefix rule {:?} for {:?}", pre, t);
+        self.execute_rule(pre)?;
+        loop {
+            if let (Some(c), Some(p)) = (self.parser.cur, self.parser.prev) {
+                if precedence > c.get_precedence() {
                     break;
                 }
+                self.advance()?;
+                let inf = c.get_infix_parse_rule();
+                println!("Executing infix rule {:?} for {:?}", inf, p);
+                self.execute_rule(inf)?;
+            } else {
+                break;
             }
-            Ok(())
-        } else {
-            Err(self.create_internal_error("Expected to find previous token"))
         }
+        Ok(())
     }
 
     fn expression(&mut self) -> Result<(), InterpretError> {
@@ -180,43 +172,38 @@ impl<'a> VM<'a> {
     }
 
     fn unary(&mut self) -> Result<(), InterpretError>  {
-        if let Some(t) = self.parser.prev {
-            self.parse_precedence(Precedence::Unary)?;
-            match t.token {
-                Token::Minus => {
-                    self.chunk.write(Opcode::Negate, t.line_information);
-                    Ok(())
-                },
-                Token::Bang => {
-                    self.chunk.write(Opcode::Not, t.line_information);
-                    Ok(())
-                }
-                t => Err(self.create_internal_error("Expected to find - or !"))
+        let t = self.parser.prev.ok_or(self.create_internal_error("Expected to find a token in parser.prev"))?;
+        self.parse_precedence(Precedence::Unary)?;
+        match t.token {
+            Token::Minus => {
+                self.chunk.write(Opcode::Negate, t.line_information);
+                Ok(())
+            },
+            Token::Bang => {
+                self.chunk.write(Opcode::Not, t.line_information);
+                Ok(())
             }
-        } else {
-            Err(self.create_internal_error("Expected to find a token in parser.prev"))
+            _ => Err(self.create_internal_error("Expected to find - or !"))
         }
     }
 
     fn literal(&mut self) -> Result<(), InterpretError> {
-        if let Some(t) = self.parser.prev {
-            match t.token {
-                Token::Number(n) => {
-                    self.chunk.emit_constant(Value::Number(n), t.line_information);
-                    Ok(())
-                },
-                Token::Boolean(b) => {
-                    self.chunk.emit_constant(Value::Boolean(b), t.line_information);
-                    Ok(())
-                },
-                Token::Null => {
-                    self.chunk.emit_constant(Value::Null, t.line_information);
-                    Ok(())
-                },
-                _ => Err(self.create_internal_error("Expected to find number, boolean or null"))
-            }
-        } else {
-            Err(self.create_internal_error("Expected to find a token in parser.prev"))
+        let t = self.parser.prev.ok_or(self.create_internal_error("Expected to find a token in parser.prev"))?;
+
+        match t.token {
+            Token::Number(n) => {
+                self.chunk.emit_constant(Value::Number(n), t.line_information);
+                Ok(())
+            },
+            Token::Boolean(b) => {
+                self.chunk.emit_constant(Value::Boolean(b), t.line_information);
+                Ok(())
+            },
+            Token::Null => {
+                self.chunk.emit_constant(Value::Null, t.line_information);
+                Ok(())
+            },
+            _ => Err(self.create_internal_error("Expected to find number, boolean or null"))
         }
     }
 
@@ -273,7 +260,7 @@ impl<'a> VM<'a> {
     }
 
     fn consume(&mut self, t: Token) -> Result<(), InterpretError> {
-        if matches!(self.parser.cur, Some(TokenWithLine { token, line_information }) if token == t) {
+        if matches!(self.parser.cur, Some(TokenWithLine { token, line_information: _ }) if token == t) {
             self.advance()
         } else {
             match self.parser.cur {
@@ -322,11 +309,11 @@ impl<'a> VM<'a> {
 
     fn create_compile_error(&self, source: ErrorSource) -> InterpretError {
         let (line, column) = match &source {
-            ErrorSource::E(errorToken) => errorToken.line_information,
+            ErrorSource::E(error_token) => error_token.line_information,
             ErrorSource::T((_, token)) => token.line_information
         };
         let msg = match &source {
-            ErrorSource::E(errorToken) => format!("{:?}", errorToken.errors),
+            ErrorSource::E(error_token) => format!("{:?}", error_token.errors),
             ErrorSource::T((message, token)) => {
                 format!("{}: {:?}", message, token)
             }
@@ -342,7 +329,7 @@ impl<'a> VM<'a> {
         loop {
             let inst = self.chunk.code[self.instruction_pointer as usize];
             if self.debug {
-                self.chunk.disassembleInstruction(self.instruction_pointer);
+                self.chunk.disassemble_instruction(self.instruction_pointer);
             }
             match inst {
                 Opcode::Return => {
